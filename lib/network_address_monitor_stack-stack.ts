@@ -1,28 +1,24 @@
 import * as cdk from 'aws-cdk-lib';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as cloudwatchactions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
-import { aws_logs as logs} from 'aws-cdk-lib';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
-
+//import { aws_logs as logs} from 'aws-cdk-lib';
 
 export class NetworkAddressMonitorStackStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
      // Define the VPC and subnet IDs
-     const vpcId = 'vpc-01b5ac0e698c10c6a';
-     const subnetId = 'subnet-09a299394cf9a2436';
+     const vpcId = 'vpc-06d0b335ef8695815';
+     const subnetId = 'subnet-06b853a400484747f';
 
      // Create the CloudWatch alarm
      const alarm = new cloudwatch.Alarm(this, 'NetworkAddressAvailabilityAlarm', {
        metric: new cloudwatch.Metric({
-         namespace: 'Custom/Subnet/IPAvailability',
-         metricName: 'AvailableIpAddressCount',
+         namespace: 'AWS/EC2',
+         metricName: 'AvailableIPAddressCount',
          dimensionsMap: {
            VpcId: vpcId,
            SubnetId: subnetId,
@@ -30,9 +26,12 @@ export class NetworkAddressMonitorStackStack extends cdk.Stack {
          statistic: 'Minimum',
          period: cdk.Duration.minutes(5),
        }),
-       threshold: 10,
+       threshold: 100,
        evaluationPeriods: 1,
        comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+       alarmName: 'IpMonitoringAlarm',
+       alarmDescription: 'Alarm triggered when the number of available IPs in the subnet falls below 100.',
+       actionsEnabled: true,
      });
  
      // Create the SNS topic
@@ -43,6 +42,17 @@ export class NetworkAddressMonitorStackStack extends cdk.Stack {
      const role = new iam.Role(this, 'NetworkAddressAvailabilityRole', {
        assumedBy: new iam.ServicePrincipal('cloudwatch.amazonaws.com'),
      });
+     role.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      resources: ['*'],
+      actions: [
+        'sns:Publish',
+        'cloudwatch:GetMetricData',
+        'cloudwatch:GetMetricStatistics',
+        'cloudwatch:DescribeAlarms',
+        'ec2:DescribeSubnets',
+      ],
+     }));
  
      // Allow CloudWatch to publish to SNS
      topic.grantPublish(role);
@@ -52,6 +62,10 @@ export class NetworkAddressMonitorStackStack extends cdk.Stack {
  
      // Add the action to the alarm
      alarm.addAlarmAction(action);
+
+     // Output the ARN of the SNS topic and the ARN of the IAM role
+     new cdk.CfnOutput(this, 'TopicArn', { value: topic.topicArn });
+     new cdk.CfnOutput(this, 'RoleArn', { value: role.roleArn });
    }
  }
  
